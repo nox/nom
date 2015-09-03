@@ -109,12 +109,12 @@ macro_rules! named (
         }
     );
     ($name:ident<$life:item,$i:ty,$o:ty>, $submac:ident!( $($args:tt)* )) => (
-        fn $name<$life>( i: $i ) -> $crate::IResult<$life,$i, $o> {
+        fn $name<$life>( i: $i ) -> $crate::IResult<$life, $i, $o> {
             $submac!(i, $($args)*)
         }
     );
     ($name:ident, $submac:ident!( $($args:tt)* )) => (
-        fn $name<'a>( i: &'a [u8] ) -> $crate::IResult<'a,&[u8], &[u8]> {
+        fn $name<'a>( i: &'a [u8] ) -> $crate::IResult<'a,&[u8], &[u8], u32> {
             $submac!(i, $($args)*)
         }
     );
@@ -134,7 +134,7 @@ macro_rules! named (
         }
     );
     (pub $name:ident, $submac:ident!( $($args:tt)* )) => (
-        pub fn $name<'a>( i: &'a [u8] ) -> $crate::IResult<'a,&[u8], &[u8]> {
+        pub fn $name<'a>( i: &'a [u8] ) -> $crate::IResult<'a,&[u8], &[u8], u32> {
             $submac!(i, $($args)*)
         }
     );
@@ -178,13 +178,14 @@ macro_rules! apply (
 /// # use std::collections;
 /// # use nom::IResult::Error;
 /// # use nom::Err::{Position,NodePosition};
+/// # use nom::ErrorKind;
 /// # fn main() {
 ///     named!(err_test, alt!(
 ///       tag!("abcd") |
-///       preceded!(tag!("efgh"), error!(42,
+///       preceded!(tag!("efgh"), error!(ErrorKind::Custom(42),
 ///           chain!(
 ///                  tag!("ijkl")              ~
-///             res: error!(128, tag!("mnop")) ,
+///             res: error!(ErrorKind::Custom(128), tag!("mnop")) ,
 ///             || { res }
 ///           )
 ///         )
@@ -199,8 +200,10 @@ macro_rules! apply (
 ///     let res_a = err_test(a);
 ///     let res_b = err_test(b);
 ///     let res_c = err_test(c);
-///     assert_eq!(res_a, Error(NodePosition(42, blah, Box::new(Position(0, blah)))));
-///     assert_eq!(res_b, Error(NodePosition(42, &b"ijklblah"[..], Box::new(NodePosition(128, blah, Box::new(Position(0, blah)))))));
+///     assert_eq!(res_a, Error(NodePosition(ErrorKind::Custom(42), blah, Box::new(Position(ErrorKind::Tag, blah)))));
+///     assert_eq!(res_b, Error(NodePosition(ErrorKind::Custom(42), &b"ijklblah"[..],
+///       Box::new(NodePosition(ErrorKind::Custom(128), blah, Box::new(Position(ErrorKind::Tag, blah))))))
+///     );
 /// # }
 /// ```
 ///
@@ -322,7 +325,7 @@ macro_rules! map_res_impl (
         $crate::IResult::Incomplete($crate::Needed::Size(i)) => $crate::IResult::Incomplete($crate::Needed::Size(i)),
         $crate::IResult::Done(i, o)                          => match $submac2!(o, $($args2)*) {
           Ok(output) => $crate::IResult::Done(i, output),
-          Err(_)     => $crate::IResult::Error($crate::Err::Position($crate::ErrorCode::MapRes as u32, $i))
+          Err(_)     => $crate::IResult::Error($crate::Err::Position($crate::ErrorKind::MapRes, $i))
         }
       }
     }
@@ -359,7 +362,7 @@ macro_rules! map_opt_impl (
         $crate::IResult::Incomplete($crate::Needed::Size(i)) => $crate::IResult::Incomplete($crate::Needed::Size(i)),
         $crate::IResult::Done(i, o)                          => match $submac2!(o, $($args2)*) {
           Some(output) => $crate::IResult::Done(i, output),
-          None         => $crate::IResult::Error($crate::Err::Position($crate::ErrorCode::MapOpt as u32, $i))
+          None         => $crate::IResult::Error($crate::Err::Position($crate::ErrorKind::MapOpt, $i))
         }
       }
     }
@@ -376,7 +379,7 @@ macro_rules! expr_res (
     {
       match $e {
         Ok(output) => $crate::IResult::Done($i, output),
-        Err(_)     => $crate::IResult::Error($crate::Err::Position($crate::ErrorCode::ExprRes as u32, $i))
+        Err(_)     => $crate::IResult::Error($crate::Err::Position($crate::ErrorKind::ExprRes, $i))
       }
     }
   );
@@ -391,7 +394,7 @@ macro_rules! expr_res (
 /// # #[macro_use] extern crate nom;
 /// # use nom::IResult::{self, Done, Error};
 /// # use nom::Err::Position;
-/// # use nom::{be_u8,ErrorCode};
+/// # use nom::{be_u8,ErrorKind};
 ///
 ///  fn take_add(input:&[u8], size: u8) -> IResult<&[u8],&[u8]> {
 ///    chain!(input,
@@ -409,7 +412,7 @@ macro_rules! expr_res (
 /// let arr2 = [0xFE, 2, 3, 4, 5];
 /// // size is overflowing
 /// let r1 = take_add(&arr2[..], 42);
-/// assert_eq!(r1, Error(Position(ErrorCode::ExprOpt as u32,&[2,3,4,5][..])));
+/// assert_eq!(r1, Error(Position(ErrorKind::ExprOpt,&[2,3,4,5][..])));
 /// # }
 /// ```
 #[macro_export]
@@ -418,7 +421,7 @@ macro_rules! expr_opt (
     {
       match $e {
         Some(output) => $crate::IResult::Done($i, output),
-        None         => $crate::IResult::Error($crate::Err::Position($crate::ErrorCode::ExprOpt as u32, $i))
+        None         => $crate::IResult::Error($crate::Err::Position($crate::ErrorKind::ExprOpt, $i))
       }
     }
   );
@@ -431,6 +434,7 @@ macro_rules! expr_opt (
 /// # #[macro_use] extern crate nom;
 /// # use nom::IResult::{self, Done, Error};
 /// # use nom::Err::Position;
+/// # use nom::ErrorKind;
 /// #[derive(PartialEq,Eq,Debug)]
 /// struct B {
 ///   a: u8,
@@ -455,7 +459,7 @@ macro_rules! expr_opt (
 /// # fn main() {
 /// // the first "abcd" tag is not present, we have an error
 /// let r1 = z(&b"efgh"[..]);
-/// assert_eq!(r1, Error(Position(0,&b"efgh"[..])));
+/// assert_eq!(r1, Error(Position(ErrorKind::Tag,&b"efgh"[..])));
 ///
 /// // everything is present, everything is parsed
 /// let r2 = z(&b"abcdabcdefgh"[..]);
@@ -768,7 +772,7 @@ macro_rules! alt_parser (
   );
 
   ($i:expr) => (
-    $crate::IResult::Error($crate::Err::Position($crate::ErrorCode::Alt as u32,$i))
+    $crate::IResult::Error($crate::Err::Position($crate::ErrorKind::Alt,$i))
   );
 );
 
@@ -814,13 +818,14 @@ macro_rules! opt(
 /// # #[macro_use] extern crate nom;
 /// # use nom::IResult::Done;
 /// # use nom::Err::Position;
+/// # use nom::ErrorKind;
 /// # fn main() {
 ///  named!( o<&[u8], Result<&[u8], nom::Err> >, opt_res!( tag!( "abcd" ) ) );
 ///
 ///  let a = b"abcdef";
 ///  let b = b"bcdefg";
 ///  assert_eq!(o(&a[..]), Done(&b"ef"[..], Ok(&b"abcd"[..])));
-///  assert_eq!(o(b), Done(&b"bcdefg"[..], Err(Position(0, b))));
+///  assert_eq!(o(b), Done(&b"bcdefg"[..], Err(Position(ErrorKind::Tag, b))));
 ///  # }
 /// ```
 #[macro_export]
@@ -905,7 +910,7 @@ macro_rules! cond(
 /// ```
 /// # #[macro_use] extern crate nom;
 /// # use nom::IResult::{Done,Error};
-/// # use nom::{Err,ErrorCode};
+/// # use nom::{Err,ErrorKind};
 /// # fn main() {
 ///  let b = true;
 ///  let f = closure!(&'static[u8],
@@ -919,7 +924,7 @@ macro_rules! cond(
 ///  let f2 = closure!(&'static[u8],
 ///    cond_reduce!( b2, tag!("abcd") )
 ///  );
-///  assert_eq!(f2(&a[..]), Error(Err::Position(ErrorCode::CondReduce as u32, &a[..])));
+///  assert_eq!(f2(&a[..]), Error(Err::Position(ErrorKind::CondReduce, &a[..])));
 ///  # }
 /// ```
 ///
@@ -934,7 +939,7 @@ macro_rules! cond_reduce(
           $crate::IResult::Incomplete(i) => $crate::IResult::Incomplete(i)
         }
       } else {
-        $crate::IResult::Error($crate::Err::Position($crate::ErrorCode::CondReduce as u32, $i))
+        $crate::IResult::Error($crate::Err::Position($crate::ErrorKind::CondReduce, $i))
       }
     }
   );
@@ -1249,7 +1254,7 @@ macro_rules! separated_list(
         $crate::IResult::Incomplete(i) => $crate::IResult::Incomplete(i),
         $crate::IResult::Done(i,o)     => {
           if i.len() == input.len() {
-            $crate::IResult::Error($crate::Err::Position($crate::ErrorCode::SeparatedList as u32,input))
+            $crate::IResult::Error($crate::Err::Position($crate::ErrorKind::SeparatedList,input))
           } else {
             res.push(o);
             input = i;
@@ -1308,7 +1313,7 @@ macro_rules! separated_nonempty_list(
         $crate::IResult::Incomplete(i) => $crate::IResult::Incomplete(i),
         $crate::IResult::Done(i,o)     => {
           if i.len() == input.len() {
-            $crate::IResult::Error($crate::Err::Position($crate::ErrorCode::SeparatedNonEmptyList as u32,input))
+            $crate::IResult::Error($crate::Err::Position($crate::ErrorKind::SeparatedNonEmptyList,input))
           } else {
             res.push(o);
             input = i;
@@ -1404,7 +1409,7 @@ macro_rules! many0(
 /// # #[macro_use] extern crate nom;
 /// # use nom::IResult::{Done, Error};
 /// # use nom::Err::Position;
-/// # use nom::ErrorCode;
+/// # use nom::ErrorKind;
 /// # fn main() {
 ///  named!(multi<&[u8], Vec<&[u8]> >, many1!( tag!( "abcd" ) ) );
 ///
@@ -1413,7 +1418,7 @@ macro_rules! many0(
 ///
 ///  let res = vec![&b"abcd"[..], &b"abcd"[..]];
 ///  assert_eq!(multi(&a[..]), Done(&b"ef"[..], res));
-///  assert_eq!(multi(&b[..]), Error(Position(ErrorCode::Many1 as u32,&b[..])));
+///  assert_eq!(multi(&b[..]), Error(Position(ErrorKind::Many1,&b[..])));
 /// # }
 /// ```
 #[macro_export]
@@ -1434,7 +1439,7 @@ macro_rules! many1(
         }
       }
       if res.len() == 0 {
-        $crate::IResult::Error($crate::Err::Position($crate::ErrorCode::Many1 as u32,$i))
+        $crate::IResult::Error($crate::Err::Position($crate::ErrorKind::Many1,$i))
       } else {
         $crate::IResult::Done(input, res)
       }
@@ -1452,7 +1457,7 @@ macro_rules! many1(
 /// # #[macro_use] extern crate nom;
 /// # use nom::IResult::{Done,Error};
 /// # use nom::Err::Position;
-/// # use nom::ErrorCode;
+/// # use nom::ErrorKind;
 /// # fn main() {
 ///  named!(counter< Vec<&[u8]> >, count!( tag!( "abcd" ), 2 ) );
 ///
@@ -1461,7 +1466,7 @@ macro_rules! many1(
 ///  let res = vec![&b"abcd"[..], &b"abcd"[..]];
 ///
 ///  assert_eq!(counter(&a[..]), Done(&b"abcdef"[..], res));
-///  assert_eq!(counter(&b[..]), Error(Position(ErrorCode::Count as u32, &b[..])));
+///  assert_eq!(counter(&b[..]), Error(Position(ErrorKind::Count, &b[..])));
 /// # }
 /// ```
 ///
@@ -1493,7 +1498,7 @@ macro_rules! count(
         }
       }
       if err {
-        $crate::IResult::Error($crate::Err::Position($crate::ErrorCode::Count as u32,$i))
+        $crate::IResult::Error($crate::Err::Position($crate::ErrorKind::Count,$i))
       } else if cnt == $count {
         $crate::IResult::Done(input, res)
       } else {
@@ -1514,7 +1519,7 @@ macro_rules! count(
 /// # #[macro_use] extern crate nom;
 /// # use nom::IResult::{Done,Error};
 /// # use nom::Err::Position;
-/// # use nom::ErrorCode;
+/// # use nom::ErrorKind;
 /// # fn main() {
 ///  named!(counter< [&[u8]; 2] >, count_fixed!( &[u8], tag!( "abcd" ), 2 ) );
 ///  // can omit the type specifier if returning slices
@@ -1525,7 +1530,7 @@ macro_rules! count(
 ///  let res = [&b"abcd"[..], &b"abcd"[..]];
 ///
 ///  assert_eq!(counter(&a[..]), Done(&b"abcdef"[..], res));
-///  assert_eq!(counter(&b[..]), Error(Position(ErrorCode::Count as u32, &b[..])));
+///  assert_eq!(counter(&b[..]), Error(Position(ErrorKind::Count, &b[..])));
 /// # }
 /// ```
 ///
@@ -1557,7 +1562,7 @@ macro_rules! count_fixed (
         }
       }
       if err {
-        $crate::IResult::Error($crate::Err::Position($crate::ErrorCode::Count as u32,$i))
+        $crate::IResult::Error($crate::Err::Position($crate::ErrorKind::Count,$i))
       } else if cnt == $count {
         $crate::IResult::Done(input, res)
       } else {
@@ -1605,7 +1610,7 @@ macro_rules! length_value(
             }
           }
           if err {
-            $crate::IResult::Error($crate::Err::Position($crate::ErrorCode::LengthValue as u32,$i))
+            $crate::IResult::Error($crate::Err::Position($crate::ErrorKind::LengthValue,$i))
           } else if res.len() < nb as usize {
             match inc {
               $crate::Needed::Unknown      => $crate::IResult::Incomplete($crate::Needed::Unknown),
@@ -1650,7 +1655,7 @@ macro_rules! length_value(
             }
           }
           if err {
-            $crate::IResult::Error($crate::Err::Position($crate::ErrorCode::LengthValue as u32,$i))
+            $crate::IResult::Error($crate::Err::Position($crate::ErrorKind::LengthValue,$i))
           } else if res.len() < nb as usize {
             match inc {
               $crate::Needed::Unknown => $crate::IResult::Incomplete($crate::Needed::Unknown),
@@ -1672,7 +1677,7 @@ mod tests {
   use internal::{Needed,IResult,Err};
   use internal::IResult::*;
   use internal::Err::*;
-  use util::ErrorCode;
+  use util::ErrorKind;
 
   // reproduce the tag macro, because of module import order
   macro_rules! tag (
@@ -1691,7 +1696,7 @@ mod tests {
         } else if &$i[0..bytes.len()] == bytes {
           $crate::IResult::Done(&$i[bytes.len()..], &$i[0..bytes.len()])
         } else {
-          $crate::IResult::Error($crate::Err::Position($crate::ErrorCode::Tag as u32, $i))
+          $crate::IResult::Error($crate::Err::Position($crate::ErrorKind::Tag, $i))
         }
       }
     );
@@ -1826,10 +1831,11 @@ mod tests {
     assert_eq!(r3, Done(&b"X"[..], C{a: 1, b: None}));
   }
 
-  use util::{error_to_list, add_error_pattern, print_error};
+  //use util::{error_to_list, add_error_pattern, print_error};
+  use util::{error_to_list, add_error_pattern};
 
   fn error_to_string(e: Err) -> &str {
-    let v:Vec<u32> = error_to_list(e);
+    let v:Vec<ErrorKind> = error_to_list(e);
     // do it this way if you can use slice patterns
     /*
     match &v[..] {
@@ -1838,9 +1844,9 @@ mod tests {
       _            => "unrecognized error"
     }
     */
-    if &v[..] == [42,0] {
+    if &v[..] == [ErrorKind::Custom(42),ErrorKind::Tag] {
       "missing `ijkl` tag"
-    } else if &v[..] == [42, 128, 0] {
+    } else if &v[..] == [ErrorKind::Custom(42), ErrorKind::Custom(128), ErrorKind::Tag] {
       "missing `mnop` tag after `ijkl`"
     } else {
       "unrecognized error"
@@ -1865,10 +1871,10 @@ mod tests {
   fn err() {
     named!(err_test, alt!(
       tag!("abcd") |
-      preceded!(tag!("efgh"), error!(42,
+      preceded!(tag!("efgh"), error!(ErrorKind::Custom(42),
           chain!(
                  tag!("ijkl")              ~
-            res: error!(128, tag!("mnop")) ,
+            res: error!(ErrorKind::Custom(128), tag!("mnop")) ,
             || { res }
           )
         )
@@ -1883,8 +1889,8 @@ mod tests {
     let res_a = err_test(a);
     let res_b = err_test(b);
     let res_c = err_test(c);
-    assert_eq!(res_a, Error(NodePosition(42, blah, Box::new(Position(0, blah)))));
-    assert_eq!(res_b, Error(NodePosition(42, &b"ijklblah"[..], Box::new(NodePosition(128, blah, Box::new(Position(0, blah)))))));
+    assert_eq!(res_a, Error(NodePosition(ErrorKind::Custom(42), blah, Box::new(Position(ErrorKind::Tag, blah)))));
+    assert_eq!(res_b, Error(NodePosition(ErrorKind::Custom(42), &b"ijklblah"[..], Box::new(NodePosition(ErrorKind::Custom(128), blah, Box::new(Position(ErrorKind::Tag, blah)))))));
     assert_eq!(res_c, Done(&b""[..], &b"mnop"[..]));
 
     // Merr-like error matching
@@ -1897,7 +1903,7 @@ mod tests {
       Error(e) => {
         let e2 = e.clone();
         let e3 = e.clone();
-        assert_eq!(error_to_list(e), [42, 0]);
+        assert_eq!(error_to_list(e), [ErrorKind::Custom(42), ErrorKind::Tag]);
         assert_eq!(error_to_string(e2), "missing `ijkl` tag");
         assert_eq!(err_map.get(&error_to_list(e3)), Some(&"missing `ijkl` tag"));
       },
@@ -1909,15 +1915,15 @@ mod tests {
       Error(e) => {
         let e2 = e.clone();
         let e3 = e.clone();
-        assert_eq!(error_to_list(e), [42, 128, 0]);
+        assert_eq!(error_to_list(e), [ErrorKind::Custom(42), ErrorKind::Custom(128), ErrorKind::Tag]);
         assert_eq!(error_to_string(e2), "missing `mnop` tag after `ijkl`");
         assert_eq!(err_map.get(&error_to_list(e3)), Some(&"missing `mnop` tag after `ijkl`"));
       },
       _ => panic!()
     };
 
-    print_error(a, res_a2);
-    print_error(b, res_b2);
+    //print_error(a, res_a2);
+    //print_error(b, res_b2);
   }
 
   #[test]
@@ -1927,8 +1933,8 @@ mod tests {
     }
 
     #[allow(unused_variables)]
-    fn dont_work(input: &[u8]) -> IResult<&[u8],&[u8]> {
-      Error(Code(42))
+    fn dont_work(input: &[u8]) -> IResult<&[u8],&[u8],&'static str> {
+      Error(Code(ErrorKind::Custom("abcd")))
     }
 
     fn work2(input: &[u8]) -> IResult<&[u8],&[u8]> {
@@ -1940,7 +1946,7 @@ mod tests {
     named!(alt3, alt!(dont_work | dont_work | work2 | dont_work));
 
     let a = &b"abcd"[..];
-    assert_eq!(alt1(a), Error(Position(ErrorCode::Alt as u32, a)));
+    assert_eq!(alt1(a), Error(Position(ErrorKind::Alt, a)));
     assert_eq!(alt2(a), Done(&b""[..], a));
     assert_eq!(alt3(a), Done(a, &b""[..]));
 
@@ -1967,7 +1973,7 @@ mod tests {
     let a = &b"abcdef"[..];
     let b = &b"bcdefg"[..];
     assert_eq!(o(a), Done(&b"ef"[..], Ok(&b"abcd"[..])));
-    assert_eq!(o(b), Done(&b"bcdefg"[..], Err(Position(0, b))));
+    assert_eq!(o(b), Done(&b"bcdefg"[..], Err(Position(ErrorKind::Tag, b))));
   }
 
   #[test]
@@ -2003,7 +2009,7 @@ mod tests {
     assert_eq!(r1, Done(&b"abcdefgh"[..], &b"abcd"[..]));
 
     let r1 = ptag(&b"efgh"[..]);
-    assert_eq!(r1, Error(Position(0,&b"efgh"[..])));
+    assert_eq!(r1, Error(Position(ErrorKind::Tag,&b"efgh"[..])));
   }
 
   #[test]
@@ -2073,7 +2079,7 @@ mod tests {
     assert_eq!(multi(a), Done(&b"ef"[..], res1));
     let res2 = vec![&b"abcd"[..], &b"abcd"[..]];
     assert_eq!(multi(b), Done(&b"ef"[..], res2));
-    assert_eq!(multi(c), Error(Position(0,c)));
+    assert_eq!(multi(c), Error(Position(ErrorKind::Tag,c)));
   }
 
   #[test]
@@ -2102,14 +2108,14 @@ mod tests {
     assert_eq!(multi(a), Done(&b"ef"[..], res1));
     let res2 = vec![&b"abcd"[..], &b"abcd"[..]];
     assert_eq!(multi(b), Done(&b"ef"[..], res2));
-    assert_eq!(multi(c), Error(Position(ErrorCode::Many1 as u32,c)));
+    assert_eq!(multi(c), Error(Position(ErrorKind::Many1,c)));
   }
 
   #[test]
   fn infinite_many() {
     fn tst(input: &[u8]) -> IResult<&[u8], &[u8]> {
       println!("input: {:?}", input);
-      Error(Position(0,input))
+      Error(Position(ErrorKind::Custom(0),input))
     }
 
     // should not go into an infinite loop
@@ -2119,7 +2125,7 @@ mod tests {
 
     named!(multi1<&[u8],Vec<&[u8]> >, many1!(tst));
     let a = &b"abcdef"[..];
-    assert_eq!(multi1(a), Error(Position(ErrorCode::Many1 as u32,a)));
+    assert_eq!(multi1(a), Error(Position(ErrorKind::Many1,a)));
   }
 
   #[test]
@@ -2134,19 +2140,22 @@ mod tests {
     let res = vec![&b"abcd"[..], &b"abcd"[..]];
 
     assert_eq!(counter(&a[..]), Done(&b"abcdef"[..], res));
-    assert_eq!(counter(&b[..]), Error(Position(ErrorCode::Count as u32, &b[..])));
+    assert_eq!(counter(&b[..]), Error(Position(ErrorKind::Count, &b[..])));
   }
 
   #[test]
   fn count_fixed() {
-    named!(counter< [&[u8]; 2] >, count_fixed!( &[u8], tag!( "abcd" ), 2 ) );
+    //named!(counter< [&[u8]; 2], u32 >, count_fixed!( &[u8], tag!( "abcd" ), 2 ) );
+    fn counter(input:&[u8]) -> IResult<&[u8], [&[u8]; 2], () > {
+      count_fixed!(input, &[u8], tag!( "abcd" ), 2 )
+    }
 
     let a = b"abcdabcdabcdef";
     let b = b"abcdefgh";
     let res = [&b"abcd"[..], &b"abcd"[..]];
 
     assert_eq!(counter(&a[..]), Done(&b"abcdef"[..], res));
-    assert_eq!(counter(&b[..]), Error(Position(ErrorCode::Count as u32, &b[..])));
+    assert_eq!(counter(&b[..]), Error(Position(ErrorKind::Count, &b[..])));
   }
 
   use nom::{le_u16,eof};
@@ -2162,14 +2171,17 @@ mod tests {
 
   #[test]
   fn count_fixed_no_type() {
-    named!(counter< [&[u8]; 2] >, count_fixed!( &[u8], tag!( "abcd" ), 2 ) );
+    //named!(counter< [&[u8]; 2], u32 >, count_fixed!( &[u8], tag!( "abcd" ), 2 ) );
+    fn counter(input:&[u8]) -> IResult<&[u8], [&[u8]; 2], () > {
+      count_fixed!(input, &[u8], tag!( "abcd" ), 2 )
+    }
 
     let a = b"abcdabcdabcdef";
     let b = b"abcdefgh";
     let res = [&b"abcd"[..], &b"abcd"[..]];
 
     assert_eq!(counter(&a[..]), Done(&b"abcdef"[..], res));
-    assert_eq!(counter(&b[..]), Error(Position(ErrorCode::Count as u32, &b[..])));
+    assert_eq!(counter(&b[..]), Error(Position(ErrorKind::Count, &b[..])));
   }
 
   use nom::{be_u8,be_u16};

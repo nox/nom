@@ -155,8 +155,8 @@ macro_rules! dbg_dmp (
   );
 );
 
-pub fn error_to_list(e:Err) -> Vec<u32> {
-  let mut v:Vec<u32> = Vec::new();
+pub fn error_to_list(e:Err) -> Vec<ErrorKind> {
+  let mut v:Vec<ErrorKind> = Vec::new();
   let mut err = e;
   loop {
     match err {
@@ -177,7 +177,7 @@ pub fn compare_error_paths(e1:Err, e2:Err) -> bool {
 }
 
 #[cfg(not(feature = "core"))]
-pub fn add_error_pattern<'a,'b,I,O>(h: &mut HashMap<Vec<u32>, &'b str>, res: IResult<'a,I,O>, message: &'b str) -> bool {
+pub fn add_error_pattern<'a,'b,I,O>(h: &mut HashMap<Vec<ErrorKind>, &'b str>, res: IResult<'a,I,O>, message: &'b str) -> bool {
   if let IResult::Error(e) = res {
     h.insert(error_to_list(e), message);
     true
@@ -194,9 +194,9 @@ pub fn slice_to_offsets(input: &[u8], s: &[u8]) -> (usize, usize) {
 }
 
 #[cfg(not(feature = "core"))]
-pub fn prepare_errors<I,O>(input: &[u8], res: IResult<I,O>) -> Option<Vec<(u32, usize, usize)> > {
+pub fn prepare_errors<I,O>(input: &[u8], res: IResult<I,O>) -> Option<Vec<(ErrorKind, usize, usize)> > {
   if let IResult::Error(e) = res {
-    let mut v:Vec<(u32, usize, usize)> = Vec::new();
+    let mut v:Vec<(ErrorKind, usize, usize)> = Vec::new();
     let mut err = e.clone();
     loop {
       match err {
@@ -225,7 +225,7 @@ pub fn prepare_errors<I,O>(input: &[u8], res: IResult<I,O>) -> Option<Vec<(u32, 
     None
   }
 }
-
+/*
 #[cfg(not(feature = "core"))]
 pub fn print_error<I,O>(input: &[u8], res: IResult<I,O>) {
   if let Some(v) = prepare_errors(input, res) {
@@ -238,6 +238,7 @@ pub fn print_error<I,O>(input: &[u8], res: IResult<I,O>) {
   }
 }
 
+//FIXME: should not be u32 here
 #[cfg(not(feature = "core"))]
 pub fn generate_colors(v: &Vec<(u32, usize, usize)>) -> HashMap<u32, u8> {
   let mut h: HashMap<u32, u8> = HashMap::new();
@@ -402,7 +403,7 @@ pub fn print_offsets(input: &[u8], from: usize, offsets: &Vec<(u32, usize, usize
   }
 
 }
-
+*/
 pub trait AsBytes {
   fn as_bytes(&self) -> &[u8];
 }
@@ -463,7 +464,8 @@ array_impls! {
     30 31 32
 }
 
-pub enum ErrorCode {
+#[derive(Debug,PartialEq,Eq,Hash,Clone)]
+pub enum ErrorKind<E=u32> {
   Tag,
   MapRes,
   MapOpt,
@@ -490,5 +492,6 @@ pub enum ErrorCode {
   Eof,
   ExprOpt,
   ExprRes,
-  CondReduce
+  CondReduce,
+  Custom(E)
 }
