@@ -77,7 +77,7 @@ macro_rules! take_bits (
     {
       use std::ops::Div;
       let (input, bit_offset) = $i;
-      if $count == 0 {
+      let res : $crate::IResult<(&[u8],usize), $t> = if $count == 0 {
         $crate::IResult::Done( (input, bit_offset), 0)
       } else {
         let cnt = ($count as usize + bit_offset).div(8);
@@ -111,7 +111,8 @@ macro_rules! take_bits (
           }
           $crate::IResult::Done( (&input[cnt..], end_offset) , acc)
         }
-      }
+      };
+      res
     }
   );
 );
